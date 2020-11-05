@@ -64,18 +64,36 @@ func (pr *pReceiver) Start(_ context.Context, host component.Host) error {
 		app := internal.NewOcaStore(c, pr.consumer, pr.logger, jobsMap, pr.cfg.UseStartTimeMetric, pr.cfg.StartTimeMetricRegex, pr.cfg.Name())
 		// need to use a logger with the gokitLog interface
 		l := internal.NewZapToGokitLogAdapter(pr.logger)
-		scrapeManager := scrape.NewManager(l, app)
-		app.SetScrapeManager(scrapeManager)
+
 		discoveryManagerScrape := discovery.NewManager(ctx, l)
+		discoveryCfg := make(map[string]discovery.Configs)
+		for _, scrapeConfig := range pr.cfg.PrometheusConfig.ScrapeConfigs {
+			discoveryCfg[scrapeConfig.JobName] = scrapeConfig.ServiceDiscoveryConfigs
+		}
+
+		// Now trigger the discovery notification to the scrape manager.
+		if err := discoveryManagerScrape.ApplyConfig(discoveryCfg); err != nil {
+			host.ReportFatalError(err)
+			return
+		}
 		go func() {
 			if err := discoveryManagerScrape.Run(); err != nil {
 				host.ReportFatalError(err)
+				return
 			}
 		}()
+
+		scrapeManager := scrape.NewManager(l, app)
+		app.SetScrapeManager(scrapeManager)
 		if err := scrapeManager.ApplyConfig(pr.cfg.PrometheusConfig); err != nil {
 			host.ReportFatalError(err)
 			return
 		}
+		if err := scrapeManager.Run(discoveryManagerScrape.SyncCh()); err != nil {
+			host.ReportFatalError(err)
+			return
+		}
+		return
 
 		// Run the scrape manager.
 		syncConfig := make(chan bool)
@@ -92,15 +110,6 @@ func (pr *pReceiver) Start(_ context.Context, host component.Host) error {
 		// By this point we've given time to the scrape manager
 		// to start applying its original configuration.
 
-		discoveryCfg := make(map[string]discovery.Configs)
-		for _, scrapeConfig := range pr.cfg.PrometheusConfig.ScrapeConfigs {
-			discoveryCfg[scrapeConfig.JobName] = scrapeConfig.ServiceDiscoveryConfigs
-		}
-
-		// Now trigger the discovery notification to the scrape manager.
-		if err := discoveryManagerScrape.ApplyConfig(discoveryCfg); err != nil {
-			errsChan <- err
-		}
 	})
 	return nil
 }

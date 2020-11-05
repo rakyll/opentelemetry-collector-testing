@@ -171,14 +171,13 @@ data:
       health_check: {}
       zpages: {}
 
-
     service:
       extensions: [health_check, zpages]
       pipelines:
         metrics:
           receivers: [prometheus]
           processors: []
-          exporters: [logging, cortex]
+          exporters: [logging]
 ---
 apiVersion: v1
 kind: Service
@@ -228,7 +227,7 @@ spec:
           - "--config=/conf/otel-collector-config.yaml"
 #           Memory Ballast size should be max 1/3 to 1/2 of memory.
           - "--mem-ballast-size-mib=683"
-        image: # PUT YOUR IMAGE LOCATION HERE
+        image: 516699956539.dkr.ecr.us-east-1.amazonaws.com/otelcol:latest
         name: otel-collector
         resources:
           limits:
