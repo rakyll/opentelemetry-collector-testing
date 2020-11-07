@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/prometheus/scrape"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/receiver/promreceiver/internal"
 	"go.uber.org/zap"
 )
 
@@ -35,11 +36,11 @@ func (r *reciever) Start(ctx context.Context, host component.Host) error {
 	discoveryCtx := context.Background()
 	discoveryCtx, cancel := context.WithCancel(ctx)
 	r.cancelFunc = cancel
+	logger := internal.NewZapToGokitLogAdapter(r.logger)
 
 	var startErr error
-	// TODO(jbd): Make logger happen.
 	r.startOnce.Do(func() {
-		discoveryManager := discovery.NewManager(discoveryCtx, nil)
+		discoveryManager := discovery.NewManager(discoveryCtx, logger)
 		discoveryCfg := make(map[string]discovery.Configs)
 		for _, scrapeConfig := range r.cfg.PrometheusConfig.ScrapeConfigs {
 			discoveryCfg[scrapeConfig.JobName] = scrapeConfig.ServiceDiscoveryConfigs
@@ -53,7 +54,7 @@ func (r *reciever) Start(ctx context.Context, host component.Host) error {
 			}
 		}()
 
-		scrapeManager := scrape.NewManager(nil, &collector{
+		scrapeManager := scrape.NewManager(logger, &collector{
 			sink: r.consumer,
 		})
 		if err := scrapeManager.ApplyConfig(r.cfg.PrometheusConfig); err != nil {

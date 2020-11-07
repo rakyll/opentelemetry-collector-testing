@@ -5,12 +5,15 @@ import (
 	"errors"
 	"sync/atomic"
 
+	v1 "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/consumer/consumerdata"
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/receiver/promreceiver/internal"
+	"go.opentelemetry.io/collector/translator/internaldata"
 
 	commonpb "github.com/census-instrumentation/opencensus-proto/gen-go/agent/common/v1"
 	resourcepb "github.com/census-instrumentation/opencensus-proto/gen-go/resource/v1"
@@ -54,7 +57,19 @@ func (tt *tx) Commit() error {
 	if m.Size() == 0 {
 		return nil
 	}
-	return tt.sink.ConsumeMetrics(context.Background(), m) // TODO(jbd): Change the background context?
+
+	var metrics []*v1.Metric
+	for _, m := range tt.cache.metrics {
+		metric, _, _ := m.ToMetric()
+		metrics = append(metrics, metric)
+	}
+	md := consumerdata.MetricsData{
+		Node:     tt.node,
+		Resource: tt.resource,
+		Metrics:  metrics,
+	}
+	// TODO(jbd): Change the background context?
+	return tt.sink.ConsumeMetrics(context.Background(), internaldata.OCToMetrics(md))
 }
 
 func (tt *tx) Rollback() error {
@@ -62,12 +77,12 @@ func (tt *tx) Rollback() error {
 }
 
 type cache struct {
-	metrics map[string]pdata.Metric
+	metrics map[string]*internal.MetricFamily
 }
 
 func newCache() *cache {
 	return &cache{
-		metrics: make(map[string]pdata.Metric, 0),
+		metrics: make(map[string]*internal.MetricFamily, 0),
 	}
 }
 
@@ -78,44 +93,14 @@ func (c *cache) Add(l labels.Labels, t int64, v float64) error {
 		return errors.New("no metric name")
 	}
 
-	metric, ok := c.metrics[name]
+	m, ok := c.metrics[name]
 	if !ok {
-		metric = pdata.NewMetric()
-		metric.InitEmpty()
-		metric.SetName(name)
-		metric.SetDataType(internal.ParseMetricDataType(name))
-		metric.SetUnit(internal.ParseMetricUnit(name))
-		// metric.SetDescription() // TODO
+		m = internal.NewMetricFamily(name, nil)
 	}
 
-	switch metric.DataType() {
-	case pdata.MetricDataTypeDoubleGauge:
-		pt := pdata.NewDoubleDataPoint()
-		pt.InitEmpty()
-		pt.SetValue(v)
-		// pt.SetStartTime() TODO
-		// pt.SetTimestamp() TODO
-		for _, label := range l {
-			pt.LabelsMap().Insert(label.Name, label.Value)
-		}
-		metric.DoubleGauge().DataPoints().Append(pt)
-	case pdata.MetricDataTypeDoubleSum:
-		// TODO(jbd): Support summary type.
-	case pdata.MetricDataTypeDoubleHistogram:
-		pt := pdata.NewDoubleHistogramDataPoint()
-		pt.InitEmpty()
-		// pt.SetValue(v)
-		// pt.SetBucketCounts()
-		// pt.SetStartTime() TODO
-		// pt.SetTimestamp() TODO
-		for _, label := range l {
-			pt.LabelsMap().Insert(label.Name, label.Value)
-		}
-		metric.DoubleHistogram().DataPoints().Append(pt)
-	}
-
-	c.metrics[name] = metric
-	return nil
+	err := m.Add(name, l, t, v)
+	c.metrics[name] = m
+	return err
 }
 
 func (c *cache) ConvertToMetrics() pdata.Metrics {
