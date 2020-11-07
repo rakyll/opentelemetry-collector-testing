@@ -3,15 +3,15 @@ package promreceiver
 import (
 	"context"
 	"errors"
-	"sync/atomic"
+	"fmt"
 
 	v1 "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/prometheus/storage"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumerdata"
-	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/receiver/promreceiver/internal"
 	"go.opentelemetry.io/collector/translator/internaldata"
 
@@ -22,21 +22,19 @@ import (
 var txidSeq int64
 
 type collector struct {
-	sink consumer.MetricsConsumer
+	sink          consumer.MetricsConsumer
+	scrapeManager *scrape.Manager
 }
 
 func (c *collector) Appender(ctx context.Context) storage.Appender {
 	return &tx{
-		txid:  atomic.AddInt64(&txidSeq, 1),
 		sink:  c.sink,
-		cache: newCache(),
+		cache: newCache(c.scrapeManager),
 	}
 }
 
 type tx struct {
-	txid int64 // access atomically
-	sink consumer.MetricsConsumer
-
+	sink  consumer.MetricsConsumer
 	cache *cache
 
 	node     *commonpb.Node
@@ -53,8 +51,7 @@ func (tt *tx) AddFast(ref uint64, t int64, v float64) error {
 }
 
 func (tt *tx) Commit() error {
-	m := tt.cache.ConvertToMetrics()
-	if m.Size() == 0 {
+	if len(tt.cache.metrics) == 0 {
 		return nil
 	}
 
@@ -77,33 +74,38 @@ func (tt *tx) Rollback() error {
 }
 
 type cache struct {
-	metrics map[string]*internal.MetricFamily
+	metrics       map[string]*internal.MetricFamily
+	scrapeManager *scrape.Manager
 }
 
-func newCache() *cache {
+func newCache(scrapeManager *scrape.Manager) *cache {
 	return &cache{
-		metrics: make(map[string]*internal.MetricFamily, 0),
+		metrics:       make(map[string]*internal.MetricFamily, 0),
+		scrapeManager: scrapeManager,
 	}
 }
 
 func (c *cache) Add(l labels.Labels, t int64, v float64) error {
-	// TODO(jbd): Normalize metric name.
+	fmt.Println(l, t, v)
 	name := l.Get(model.MetricNameLabel)
 	if name == "" {
 		return errors.New("no metric name")
 	}
 
+	targets := c.scrapeManager.TargetsActive() // TODO(jbd): Fix the contention.
+	fmt.Println("targets ======>", targets)
+	target, ok := targets[name]
+	if !ok || len(target) == 0 {
+		return nil // skip recording
+	}
+
 	m, ok := c.metrics[name]
 	if !ok {
-		m = internal.NewMetricFamily(name, nil)
+		metadata, _ := target[0].Metadata(name)
+		m = internal.NewMetricFamily(name, metadata)
 	}
 
 	err := m.Add(name, l, t, v)
 	c.metrics[name] = m
 	return err
-}
-
-func (c *cache) ConvertToMetrics() pdata.Metrics {
-	m := pdata.NewMetrics()
-	return m
 }

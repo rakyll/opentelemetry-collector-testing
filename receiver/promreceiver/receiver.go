@@ -36,6 +36,7 @@ func (r *reciever) Start(ctx context.Context, host component.Host) error {
 	discoveryCtx := context.Background()
 	discoveryCtx, cancel := context.WithCancel(ctx)
 	r.cancelFunc = cancel
+
 	logger := internal.NewZapToGokitLogAdapter(r.logger)
 
 	var startErr error
@@ -50,19 +51,23 @@ func (r *reciever) Start(ctx context.Context, host component.Host) error {
 		}
 		go func() {
 			if err := discoveryManager.Run(); err != nil {
-				host.ReportFatalError(err) // TODO(jbd): Should halt or just report?
+				host.ReportFatalError(err)
 			}
 		}()
 
-		scrapeManager := scrape.NewManager(logger, &collector{
+		collector := &collector{
 			sink: r.consumer,
-		})
+		}
+		scrapeManager := scrape.NewManager(logger, collector)
+		// TODO(jbd): Remove collector's dependency on the scrape manager.
+		// Required for metadata for now.
+		collector.scrapeManager = scrapeManager
 		if err := scrapeManager.ApplyConfig(r.cfg.PrometheusConfig); err != nil {
 			startErr = err // TODO(jbd): Should halt or just report?
 			return
 		}
 		if err := scrapeManager.Run(discoveryManager.SyncCh()); err != nil {
-			host.ReportFatalError(err) // TODO(jbd): Should halt or just report?
+			host.ReportFatalError(err)
 		}
 	})
 	return startErr

@@ -38,19 +38,18 @@ const (
 )
 
 var (
-	trimmableSuffixes     = []string{metricsSuffixBucket, metricsSuffixCount, metricsSuffixSum}
 	errNoDataToBuild      = errors.New("there's no data to build")
 	errNoBoundaryLabel    = errors.New("given metricType has no BucketLabel or QuantileLabel")
 	errEmptyBoundaryLabel = errors.New("BucketLabel or QuantileLabel is empty")
 	errMetricNameNotFound = errors.New("metric name not found")
 
-	emptyMetrics = make([]*metricspb.Metric, 0)
+	emptyMetrics      = make([]*metricspb.Metric, 0)
+	trimmableSuffixes = []string{metricsSuffixBucket, metricsSuffixCount, metricsSuffixSum}
 )
 
 type metricBuilder struct {
 	hasData              bool
 	hasInternalMetric    bool
-	mc                   MetadataCache
 	metrics              []*metricspb.Metric
 	numTimeseries        int
 	droppedTimeseries    int
@@ -64,13 +63,12 @@ type metricBuilder struct {
 // newMetricBuilder creates a MetricBuilder which is allowed to feed all the datapoints from a single prometheus
 // scraped page by calling its AddDataPoint function, and turn them into an opencensus data.MetricsData object
 // by calling its Build function
-func newMetricBuilder(mc MetadataCache, useStartTimeMetric bool, startTimeMetricRegex string, logger *zap.Logger) *metricBuilder {
+func newMetricBuilder(useStartTimeMetric bool, startTimeMetricRegex string, logger *zap.Logger) *metricBuilder {
 	var regex *regexp.Regexp
 	if startTimeMetricRegex != "" {
 		regex, _ = regexp.Compile(startTimeMetricRegex)
 	}
 	return &metricBuilder{
-		mc:                   mc,
 		metrics:              make([]*metricspb.Metric, 0),
 		logger:               logger,
 		numTimeseries:        0,
@@ -128,9 +126,9 @@ func (b *metricBuilder) AddDataPoint(ls labels.Labels, t int64, v float64) error
 		if m != nil {
 			b.metrics = append(b.metrics, m)
 		}
-		b.currentMf = NewMetricFamily(metricName, b.mc)
+		b.currentMf = NewMetricFamily(metricName, b.currentMf.metadata)
 	} else if b.currentMf == nil {
-		b.currentMf = NewMetricFamily(metricName, b.mc)
+		b.currentMf = NewMetricFamily(metricName, b.currentMf.metadata)
 	}
 
 	return b.currentMf.Add(metricName, ls, t, v)

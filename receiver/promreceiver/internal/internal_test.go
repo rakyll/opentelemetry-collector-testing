@@ -15,8 +15,6 @@
 package internal
 
 import (
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/scrape"
 	"go.uber.org/zap"
 )
 
@@ -27,29 +25,4 @@ var testLogger *zap.Logger
 func init() {
 	zl, _ := zap.NewDevelopment()
 	testLogger = zl
-}
-
-type mockMetadataCache struct {
-	data map[string]scrape.MetricMetadata
-}
-
-func newMockMetadataCache(data map[string]scrape.MetricMetadata) *mockMetadataCache {
-	return &mockMetadataCache{data: data}
-}
-
-func (m *mockMetadataCache) Metadata(metricName string) (scrape.MetricMetadata, bool) {
-	mm, ok := m.data[metricName]
-	return mm, ok
-}
-
-func (m *mockMetadataCache) SharedLabels() labels.Labels {
-	return labels.FromStrings("__scheme__", "http")
-}
-
-type mockScrapeManager struct {
-	targets map[string][]*scrape.Target
-}
-
-func (sm *mockScrapeManager) TargetsAll() map[string][]*scrape.Target {
-	return sm.targets
 }

@@ -20,53 +20,39 @@ import (
 
 	metricspb "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/scrape"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type MetricFamily struct {
-	name              string
-	mtype             metricspb.MetricDescriptor_Type
-	mc                MetadataCache
+	name     string
+	mtype    metricspb.MetricDescriptor_Type
+	metadata scrape.MetricMetadata
+
 	droppedTimeseries int
 	labelKeys         map[string]bool
 	labelKeysOrdered  []string
-	metadata          *scrape.MetricMetadata
-	groupOrders       map[string]int
-	groups            map[string]*metricGroup
+
+	groupOrders map[string]int
+	groups      map[string]*metricGroup
 }
 
-func NewMetricFamily(metricName string, mc MetadataCache) *MetricFamily {
-	familyName := normalizeMetricName(metricName)
-
-	// lookup metadata based on familyName
-	metadata, ok := mc.Metadata(familyName)
-	if !ok && metricName != familyName {
-		// use the original metricName as metricFamily
-		familyName = metricName
-		// perform a 2nd lookup with the original metric name. it can happen if there's a metric which is not histogram
-		// or summary, but ends with one of those _count/_sum suffixes
-		metadata, ok = mc.Metadata(metricName)
-		// still not found, this can happen when metric has no TYPE HINT
-		if !ok {
-			metadata.Metric = familyName
-			metadata.Type = textparse.MetricTypeUnknown
-		}
-	}
-
+func NewMetricFamily(metricName string, metadata scrape.MetricMetadata) *MetricFamily {
+	name := normalizeMetricName(metricName)
 	return &MetricFamily{
-		name:              familyName,
-		mtype:             convToOCAMetricType(metadata.Type),
-		mc:                mc,
+		name:              name,
+		metadata:          metadata,
 		droppedTimeseries: 0,
 		labelKeys:         make(map[string]bool),
 		labelKeysOrdered:  make([]string, 0),
-		metadata:          &metadata,
 		groupOrders:       make(map[string]int),
 		groups:            make(map[string]*metricGroup),
 	}
+}
+
+func (mf *MetricFamily) MetricType() metricspb.MetricDescriptor_Type {
+	return convToOCAMetricType(mf.metadata.Type)
 }
 
 func (mf *MetricFamily) IsSameFamily(metricName string) bool {
