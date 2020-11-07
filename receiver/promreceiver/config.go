@@ -51,22 +51,22 @@ func NewFactory() component.ReceiverFactory {
 	)
 }
 
-func customUnmarshaler(componentViperSection *viper.Viper, intoCfg interface{}) error {
-	if componentViperSection == nil {
+func customUnmarshaler(v *viper.Viper, intoCfg interface{}) error {
+	if v == nil {
 		return nil
 	}
 	// We need custom unmarshaling because prometheus "config" subkey defines its own
 	// YAML unmarshaling routines so we need to do it explicitly.
-	err := componentViperSection.UnmarshalExact(intoCfg)
+	err := v.UnmarshalExact(intoCfg)
 	if err != nil {
 		return fmt.Errorf("prometheus receiver failed to parse config: %s", err)
 	}
 
 	// Unmarshal prometheus's config values. Since prometheus uses `yaml` tags, so use `yaml`.
-	if !componentViperSection.IsSet(prometheusConfigKey) {
+	if !v.IsSet(prometheusConfigKey) {
 		return nil
 	}
-	promCfgMap := componentViperSection.Sub(prometheusConfigKey).AllSettings()
+	promCfgMap := v.Sub(prometheusConfigKey).AllSettings()
 	out, err := yaml.Marshal(promCfgMap)
 	if err != nil {
 		return fmt.Errorf("prometheus receiver failed to marshal config to yaml: %s", err)
