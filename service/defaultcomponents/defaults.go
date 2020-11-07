@@ -47,7 +47,7 @@ import (
 	"go.opentelemetry.io/collector/receiver/kafkareceiver"
 	"go.opentelemetry.io/collector/receiver/opencensusreceiver"
 	"go.opentelemetry.io/collector/receiver/otlpreceiver"
-	"go.opentelemetry.io/collector/receiver/prometheusreceiver"
+	"go.opentelemetry.io/collector/receiver/promreceiver"
 	"go.opentelemetry.io/collector/receiver/zipkinreceiver"
 )
 
@@ -73,7 +73,7 @@ func Components() (
 		jaegerreceiver.NewFactory(),
 		fluentforwardreceiver.NewFactory(),
 		zipkinreceiver.NewFactory(),
-		prometheusreceiver.NewFactory(),
+		promreceiver.NewFactory(),
 		opencensusreceiver.NewFactory(),
 		otlpreceiver.NewFactory(),
 		hostmetricsreceiver.NewFactory(),

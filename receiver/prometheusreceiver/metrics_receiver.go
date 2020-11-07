@@ -25,7 +25,6 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/obsreport"
 	"go.opentelemetry.io/collector/receiver/prometheusreceiver/internal"
 )
 
@@ -56,7 +55,8 @@ func (pr *pReceiver) Start(_ context.Context, host component.Host) error {
 		ctx := context.Background()
 		c, cancel := context.WithCancel(ctx)
 		pr.cancel = cancel
-		c = obsreport.ReceiverContext(c, pr.cfg.Name(), "http", pr.cfg.Name())
+
+		// c = obsreport.ReceiverContext(c, pr.cfg.Name(), "http", pr.cfg.Name())
 		var jobsMap *internal.JobsMap
 		if !pr.cfg.UseStartTimeMetric {
 			jobsMap = internal.NewJobsMap(2 * time.Minute)
@@ -65,35 +65,19 @@ func (pr *pReceiver) Start(_ context.Context, host component.Host) error {
 		// need to use a logger with the gokitLog interface
 		l := internal.NewZapToGokitLogAdapter(pr.logger)
 
-		discoveryManagerScrape := discovery.NewManager(ctx, l)
-		discoveryCfg := make(map[string]discovery.Configs)
-		for _, scrapeConfig := range pr.cfg.PrometheusConfig.ScrapeConfigs {
-			discoveryCfg[scrapeConfig.JobName] = scrapeConfig.ServiceDiscoveryConfigs
-		}
-
-		// Now trigger the discovery notification to the scrape manager.
-		if err := discoveryManagerScrape.ApplyConfig(discoveryCfg); err != nil {
-			host.ReportFatalError(err)
-			return
-		}
-		go func() {
-			if err := discoveryManagerScrape.Run(); err != nil {
-				host.ReportFatalError(err)
-				return
-			}
-		}()
-
 		scrapeManager := scrape.NewManager(l, app)
 		app.SetScrapeManager(scrapeManager)
 		if err := scrapeManager.ApplyConfig(pr.cfg.PrometheusConfig); err != nil {
 			host.ReportFatalError(err)
 			return
 		}
-		if err := scrapeManager.Run(discoveryManagerScrape.SyncCh()); err != nil {
-			host.ReportFatalError(err)
-			return
-		}
-		return
+
+		discoveryManagerScrape := discovery.NewManager(ctx, l)
+		go func() {
+			if err := discoveryManagerScrape.Run(); err != nil {
+				host.ReportFatalError(err)
+			}
+		}()
 
 		// Run the scrape manager.
 		syncConfig := make(chan bool)
@@ -106,10 +90,20 @@ func (pr *pReceiver) Start(_ context.Context, host component.Host) error {
 				errsChan <- err
 			}
 		}()
+		return
 		<-syncConfig
 		// By this point we've given time to the scrape manager
 		// to start applying its original configuration.
 
+		discoveryCfg := make(map[string]discovery.Configs)
+		for _, scrapeConfig := range pr.cfg.PrometheusConfig.ScrapeConfigs {
+			discoveryCfg[scrapeConfig.JobName] = scrapeConfig.ServiceDiscoveryConfigs
+		}
+
+		// Now trigger the discovery notification to the scrape manager.
+		if err := discoveryManagerScrape.ApplyConfig(discoveryCfg); err != nil {
+			errsChan <- err
+		}
 	})
 	return nil
 }

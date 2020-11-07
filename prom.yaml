@@ -1,0 +1,32 @@
+receivers:
+  prometheus:
+    config:
+      global:
+        scrape_interval: 1m
+        scrape_timeout: 10s
+      scrape_configs:
+        - job_name: prometheus
+          static_configs:
+            - targets: ['localhost:9090']
+      #   - job_name: 'job'
+      #     scrape_interval: 10s
+      #     scrape_timeout:  5s
+
+      #     target_groups:
+      #       - targets: ['10.1.200.130:5051', '10.1.200.134:5051']
+
+exporters:
+  logging:
+    loglevel: error
+
+extensions:
+  health_check: {}
+  zpages: {}
+
+service:
+  extensions: [health_check, zpages]
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      processors: []
+      exporters: [logging]

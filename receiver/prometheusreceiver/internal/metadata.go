@@ -16,6 +16,7 @@ package internal
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -43,6 +44,8 @@ type mService struct {
 
 func (t *mService) Get(job, instance string) (MetadataCache, error) {
 	targetGroup, ok := t.sm.TargetsAll()[job]
+	fmt.Println(targetGroup)
+
 	if !ok {
 		return nil, errors.New("unable to find a target group with job=" + job)
 	}
