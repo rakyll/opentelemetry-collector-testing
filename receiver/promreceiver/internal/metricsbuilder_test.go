@@ -96,7 +96,7 @@ func runBuilderTests(t *testing.T, tests []buildTestData) {
 			assert.EqualValues(t, len(tt.wants), len(tt.inputs))
 			st := startTs
 			for i, page := range tt.inputs {
-				b := newMetricBuilder(true, "", testLogger)
+				b := NewMetricBuilder(true, "", testLogger)
 				b.startTime = defaultBuilderStartTime // set to a non-zero value
 				for _, pt := range page.pts {
 					// set ts for testing
@@ -118,7 +118,7 @@ func runBuilderStartTimeTests(t *testing.T, tests []buildTestData,
 		t.Run(tt.name, func(t *testing.T) {
 			st := startTs
 			for _, page := range tt.inputs {
-				b := newMetricBuilder(true, startTimeMetricRegex,
+				b := NewMetricBuilder(true, startTimeMetricRegex,
 					testLogger)
 				b.startTime = defaultBuilderStartTime // set to a non-zero value
 				for _, pt := range page.pts {
@@ -1138,7 +1138,7 @@ func Test_metricBuilder_skipped(t *testing.T) {
 
 func Test_metricBuilder_baddata(t *testing.T) {
 	t.Run("empty-metric-name", func(t *testing.T) {
-		b := newMetricBuilder(true, "", testLogger)
+		b := NewMetricBuilder(true, "", testLogger)
 		b.startTime = 1.0 // set to a non-zero value
 		if err := b.AddDataPoint(labels.FromStrings("a", "b"), startTs, 123); err != errMetricNameNotFound {
 			t.Error("expecting errMetricNameNotFound error, but get nil")
@@ -1151,7 +1151,7 @@ func Test_metricBuilder_baddata(t *testing.T) {
 	})
 
 	t.Run("histogram-datapoint-no-bucket-label", func(t *testing.T) {
-		b := newMetricBuilder(true, "", testLogger)
+		b := NewMetricBuilder(true, "", testLogger)
 		b.startTime = 1.0 // set to a non-zero value
 		if err := b.AddDataPoint(createLabels("hist_test", "k", "v"), startTs, 123); err != errEmptyBoundaryLabel {
 			t.Error("expecting errEmptyBoundaryLabel error, but get nil")
@@ -1159,7 +1159,7 @@ func Test_metricBuilder_baddata(t *testing.T) {
 	})
 
 	t.Run("summary-datapoint-no-quantile-label", func(t *testing.T) {
-		b := newMetricBuilder(true, "", testLogger)
+		b := NewMetricBuilder(true, "", testLogger)
 		b.startTime = 1.0 // set to a non-zero value
 		if err := b.AddDataPoint(createLabels("summary_test", "k", "v"), startTs, 123); err != errEmptyBoundaryLabel {
 			t.Error("expecting errEmptyBoundaryLabel error, but get nil")
@@ -1249,8 +1249,8 @@ func Test_normalizeMetricName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeMetricName(tt.mname); got != tt.want {
-				t.Errorf("normalizeMetricName() = %v, want %v", got, tt.want)
+			if got := NormalizeMetricName(tt.mname); got != tt.want {
+				t.Errorf("NormalizeMetricName() = %v, want %v", got, tt.want)
 			}
 		})
 	}

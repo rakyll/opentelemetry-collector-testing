@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/scrape"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -43,13 +44,11 @@ var (
 	errEmptyBoundaryLabel = errors.New("BucketLabel or QuantileLabel is empty")
 	errMetricNameNotFound = errors.New("metric name not found")
 
-	emptyMetrics      = make([]*metricspb.Metric, 0)
 	trimmableSuffixes = []string{metricsSuffixBucket, metricsSuffixCount, metricsSuffixSum}
 )
 
-type metricBuilder struct {
+type MetricBuilder struct {
 	hasData              bool
-	hasInternalMetric    bool
 	metrics              []*metricspb.Metric
 	numTimeseries        int
 	droppedTimeseries    int
@@ -60,15 +59,15 @@ type metricBuilder struct {
 	currentMf            *MetricFamily
 }
 
-// newMetricBuilder creates a MetricBuilder which is allowed to feed all the datapoints from a single prometheus
+// NewMetricBuilder creates a MetricBuilder which is allowed to feed all the datapoints from a single prometheus
 // scraped page by calling its AddDataPoint function, and turn them into an opencensus data.MetricsData object
 // by calling its Build function
-func newMetricBuilder(useStartTimeMetric bool, startTimeMetricRegex string, logger *zap.Logger) *metricBuilder {
+func NewMetricBuilder(useStartTimeMetric bool, startTimeMetricRegex string, logger *zap.Logger) *MetricBuilder {
 	var regex *regexp.Regexp
 	if startTimeMetricRegex != "" {
 		regex, _ = regexp.Compile(startTimeMetricRegex)
 	}
-	return &metricBuilder{
+	return &MetricBuilder{
 		metrics:              make([]*metricspb.Metric, 0),
 		logger:               logger,
 		numTimeseries:        0,
@@ -78,16 +77,15 @@ func newMetricBuilder(useStartTimeMetric bool, startTimeMetricRegex string, logg
 	}
 }
 
-func (b *metricBuilder) matchStartTimeMetric(metricName string) bool {
+func (b *MetricBuilder) matchStartTimeMetric(metricName string) bool {
 	if b.startTimeMetricRegex != nil {
 		return b.startTimeMetricRegex.MatchString(metricName)
 	}
-
 	return metricName == startTimeMetricName
 }
 
 // AddDataPoint is for feeding prometheus data complexValue in its processing order
-func (b *metricBuilder) AddDataPoint(ls labels.Labels, t int64, v float64) error {
+func (b *MetricBuilder) AddDataPoint(metadata scrape.MetricMetadata, ls labels.Labels, t int64, v float64) error {
 	metricName := ls.Get(model.MetricNameLabel)
 	switch {
 	case metricName == "":
@@ -95,7 +93,6 @@ func (b *metricBuilder) AddDataPoint(ls labels.Labels, t int64, v float64) error
 		b.droppedTimeseries++
 		return errMetricNameNotFound
 	case isInternalMetric(metricName):
-		b.hasInternalMetric = true
 		lm := ls.Map()
 		delete(lm, model.MetricNameLabel)
 		// See https://www.prometheus.io/docs/concepts/jobs_instances/#automatically-generated-labels-and-time-series
@@ -118,7 +115,6 @@ func (b *metricBuilder) AddDataPoint(ls labels.Labels, t int64, v float64) error
 	}
 
 	b.hasData = true
-
 	if b.currentMf != nil && !b.currentMf.IsSameFamily(metricName) {
 		m, ts, dts := b.currentMf.ToMetric()
 		b.numTimeseries += ts
@@ -126,9 +122,9 @@ func (b *metricBuilder) AddDataPoint(ls labels.Labels, t int64, v float64) error
 		if m != nil {
 			b.metrics = append(b.metrics, m)
 		}
-		b.currentMf = NewMetricFamily(metricName, b.currentMf.metadata)
+		b.currentMf = NewMetricFamily(metricName, metadata)
 	} else if b.currentMf == nil {
-		b.currentMf = NewMetricFamily(metricName, b.currentMf.metadata)
+		b.currentMf = NewMetricFamily(metricName, metadata)
 	}
 
 	return b.currentMf.Add(metricName, ls, t, v)
@@ -136,11 +132,8 @@ func (b *metricBuilder) AddDataPoint(ls labels.Labels, t int64, v float64) error
 
 // Build an opencensus data.MetricsData based on all added data complexValue.
 // The only error returned by this function is errNoDataToBuild.
-func (b *metricBuilder) Build() ([]*metricspb.Metric, int, int, error) {
+func (b *MetricBuilder) Build() ([]*metricspb.Metric, int, int, error) {
 	if !b.hasData {
-		if b.hasInternalMetric {
-			return emptyMetrics, 0, 0, nil
-		}
 		return nil, 0, 0, errNoDataToBuild
 	}
 
@@ -191,7 +184,7 @@ func dpgSignature(orderedKnownLabelKeys []string, ls labels.Labels) string {
 	return fmt.Sprintf("%#v", sign)
 }
 
-func normalizeMetricName(name string) string {
+func NormalizeMetricName(name string) string {
 	for _, s := range trimmableSuffixes {
 		if strings.HasSuffix(name, s) && name != s {
 			return strings.TrimSuffix(name, s)

@@ -39,7 +39,7 @@ type MetricFamily struct {
 }
 
 func NewMetricFamily(metricName string, metadata scrape.MetricMetadata) *MetricFamily {
-	name := normalizeMetricName(metricName)
+	name := NormalizeMetricName(metricName)
 	return &MetricFamily{
 		name:              name,
 		metadata:          metadata,
@@ -57,7 +57,7 @@ func (mf *MetricFamily) MetricType() metricspb.MetricDescriptor_Type {
 
 func (mf *MetricFamily) IsSameFamily(metricName string) bool {
 	// trim known suffix if necessary
-	familyName := normalizeMetricName(metricName)
+	familyName := NormalizeMetricName(metricName)
 	return mf.name == familyName || familyName != metricName && mf.name == metricName
 }
 

@@ -47,10 +47,12 @@ func (r *reciever) Start(ctx context.Context, host component.Host) error {
 			discoveryCfg[scrapeConfig.JobName] = scrapeConfig.ServiceDiscoveryConfigs
 		}
 		if err := discoveryManager.ApplyConfig(discoveryCfg); err != nil {
-			host.ReportFatalError(err)
+			startErr = err
+			return
 		}
 		go func() {
 			if err := discoveryManager.Run(); err != nil {
+				r.logger.Error("Discovery manager failed", zap.Error(err))
 				host.ReportFatalError(err)
 			}
 		}()
@@ -63,12 +65,15 @@ func (r *reciever) Start(ctx context.Context, host component.Host) error {
 		// Required for metadata for now.
 		collector.scrapeManager = scrapeManager
 		if err := scrapeManager.ApplyConfig(r.cfg.PrometheusConfig); err != nil {
-			startErr = err // TODO(jbd): Should halt or just report?
+			startErr = err
 			return
 		}
-		if err := scrapeManager.Run(discoveryManager.SyncCh()); err != nil {
-			host.ReportFatalError(err)
-		}
+		go func() {
+			if err := scrapeManager.Run(discoveryManager.SyncCh()); err != nil {
+				r.logger.Error("Scrape manager failed", zap.Error(err))
+				host.ReportFatalError(err)
+			}
+		}()
 	})
 	return startErr
 }
