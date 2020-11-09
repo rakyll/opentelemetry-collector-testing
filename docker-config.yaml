@@ -157,15 +157,6 @@ data:
     exporters:
       logging:
         loglevel: debug
-      cortex:
-        endpoint: "" # UPDATE CORTEX ENDPOINT HERE
-        namespace: "namespace of choice" #UPDATE NAMESPACE HERE
-        aws_auth:
-          enabled: true
-          region: "us-west-2" #UPDATE ACCORDING TO YOUR CLOUD SETUP
-          service: "aps"
-          debug: true
-        timeout: 10s
 
     extensions:
       health_check: {}
@@ -229,7 +220,7 @@ spec:
           - "--mem-ballast-size-mib=683"
         # image: 516699956539.dkr.ecr.us-east-1.amazonaws.com/otelcol:latest
         image: rakyll/otelcol:latest
-        # imagePullPolicy: Never
+        imagePullPolicy: Always
         name: otel-collector
         resources:
           limits:
